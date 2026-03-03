@@ -37,7 +37,7 @@ class LLMFeature(BaseFeature):
 
         print(f"  🧠 Calling LLM ({self.model})...")
         print(f"  🌐 Using Base URL: {self.client.base_url}")
-        
+
         try:
             response = self.client.chat.completions.create(
                 model=self.model,

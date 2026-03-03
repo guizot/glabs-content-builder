@@ -1,1 +1,6 @@
-create instagram post that has 1 hook and 5 content, make the title content has number like '1. blablabla', '2. blablabla' etc. using design1 from this articles: https://www.alodokter.com/cara-menjaga-kelezatan-daging-merah-agar-tetap-bersahabat
+create 
+instagram story that has 1 hook and 1 content
+instagram feed that has 1 hook and 1 content
+instagram post that has 1 hook and 1 content
+using design2 from this articles:
+https://www.theverge.com/tech/888082/xiaomi-unlike-google-and-samsung-thinks-camera-hardware-comes-first

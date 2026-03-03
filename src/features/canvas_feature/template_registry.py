@@ -14,6 +14,14 @@ TEMPLATE_REGISTRY = {
     ("instagram_story", "content", "design1"): "src.features.canvas_feature.templates.instagram_story.content.design1.ContentDesign1",
     ("instagram_feed", "hook", "design1"): "src.features.canvas_feature.templates.instagram_feed.hook.design1.HookDesign1",
     ("instagram_feed", "content", "design1"): "src.features.canvas_feature.templates.instagram_feed.content.design1.ContentDesign1",
+
+    # Design 2
+    ("instagram_post", "hook", "design2"): "src.features.canvas_feature.templates.instagram_post.hook.design2.HookDesign2",
+    ("instagram_post", "content", "design2"): "src.features.canvas_feature.templates.instagram_post.content.design2.ContentDesign2",
+    ("instagram_story", "hook", "design2"): "src.features.canvas_feature.templates.instagram_story.hook.design2.HookDesign2",
+    ("instagram_story", "content", "design2"): "src.features.canvas_feature.templates.instagram_story.content.design2.ContentDesign2",
+    ("instagram_feed", "hook", "design2"): "src.features.canvas_feature.templates.instagram_feed.hook.design2.HookDesign2",
+    ("instagram_feed", "content", "design2"): "src.features.canvas_feature.templates.instagram_feed.content.design2.ContentDesign2",
 }
 
 
