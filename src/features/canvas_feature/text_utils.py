@@ -70,16 +70,16 @@ def wrap_text(text: str, font: ImageFont.FreeTypeFont, max_width: int) -> list[s
 def get_text_height(
     lines: list[str], font: ImageFont.FreeTypeFont, line_spacing: int = 10
 ) -> int:
-    """Calculate total height of a block of wrapped text."""
+    """Calculate total height of a block of wrapped text using fixed font metrics."""
     if not lines:
         return 0
 
-    total = 0
-    for i, line in enumerate(lines):
-        bbox = font.getbbox(line)
-        total += bbox[3] - bbox[1]
-        if i < len(lines) - 1:
-            total += line_spacing
+    ascent, descent = font.getmetrics()
+    fixed_line_height = ascent + descent
+    
+    total = sum(fixed_line_height for _ in lines)
+    if len(lines) > 1:
+        total += (len(lines) - 1) * line_spacing
 
     return total
 
@@ -96,17 +96,18 @@ def draw_text_block(
     max_width: int = None,
 ) -> int:
     """
-    Draw a block of pre-wrapped text lines.
+    Draw a block of pre-wrapped text lines with consistent spacing.
     Returns the y position after the last line.
 
     align: "left", "center", or "right"
     max_width: required for center/right alignment
     """
+    ascent, descent = font.getmetrics()
+    fixed_line_height = ascent + descent
     current_y = y
 
     for line in lines:
         bbox = font.getbbox(line)
-        line_height = bbox[3] - bbox[1]
         line_width = bbox[2] - bbox[0]
 
         if align == "center" and max_width:
@@ -116,7 +117,8 @@ def draw_text_block(
         else:
             draw_x = x
 
+        # Draw text at current_y, using 'la' (left alignment, top of ascent) as default
         draw.text((draw_x, current_y), line, fill=color, font=font)
-        current_y += line_height + line_spacing
+        current_y += fixed_line_height + line_spacing
 
     return current_y

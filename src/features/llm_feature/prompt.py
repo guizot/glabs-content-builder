@@ -27,9 +27,10 @@ RULES:
 7. Allowed Designs: 'design1'
 8. Required fields for 'hook' template inside 'content' object: 'hook_text'
 9. Required fields for 'content' template inside 'content' object: 'title', 'description'
-10. CHARACTER LIMITS (You MUST strictly follow these. Summarize if needed to stay under limit):
+10. CHARACTER LIMITS (You MUST strictly follow these. Provide meaningful, detailed content that approaches these limits without exceeding them.):
 {CONSTRAINTS_TEXT}
-11. Do NOT use emojis in any of the generated text.
+11. The 'description' field for 'content' templates should be a comprehensive and engaging paragraph (2-4 sentences for feed and post, 3-5 sentences for story), providing enough detail to be informative while staying within the character limits.
+12. Do NOT use emojis in any of the generated text.
 
 
 JSON SCHEMA EXAMPLE:

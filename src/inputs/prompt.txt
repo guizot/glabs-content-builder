@@ -1,6 +1,5 @@
 create 
-instagram story that has 1 hook and 1 content
-instagram feed that has 1 hook and 1 content
-instagram post that has 1 hook and 1 content
+instagram story that has 1 hook and 5 content
+make the title of the content more catchy and interesting
 using design2 from this articles:
-https://www.theverge.com/tech/888082/xiaomi-unlike-google-and-samsung-thinks-camera-hardware-comes-first
+https://www.theverge.com/tech/887899/spacex-ipo-risks-ai
