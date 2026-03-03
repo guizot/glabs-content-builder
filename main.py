@@ -6,6 +6,9 @@ Usage (Generate JSON + Images from prompt):
 
 Usage (Generate Images strictly from existing JSON file):
     python main.py --input src/inputs/sample_batch.json
+
+Usage (Launch Telegram Bot):
+    python main.py --telegram
 """
 
 import argparse
@@ -20,6 +23,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 from src.features.scraper_feature.scraper import ScraperFeature
 from src.features.llm_feature.llm import LLMFeature
 from src.features.canvas_feature.canvas import CanvasFeature
+from src.features.telegram_feature.telegram_bot import TelegramBotFeature
 
 
 def validate_file(path: str) -> None:
@@ -114,6 +118,11 @@ def main():
         type=str,
         help="Path to JSON batch file (Launch JSON-to-images direct pipeline)",
     )
+    group.add_argument(
+        "--telegram",
+        action="store_true",
+        help="Launch the Telegram bot (reads TELEGRAM_BOT_TOKEN from .env)",
+    )
     parser.add_argument(
         "--output",
         type=str,
@@ -131,7 +140,12 @@ def main():
     print()
 
     # Determine pipeline logic branch
-    if args.prompt:
+    if args.telegram:
+        from dotenv import load_dotenv
+        load_dotenv()
+        bot = TelegramBotFeature()
+        bot.execute()
+    elif args.prompt:
         full_generation_pipeline(args.prompt, args.output)
     elif args.input:
         json_only_pipeline(args.input, args.output)

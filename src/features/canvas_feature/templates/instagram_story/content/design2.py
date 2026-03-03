@@ -73,7 +73,7 @@ class ContentDesign2:
             x=padding_x,
             y=desc_y,
             color=text_muted,
-            line_spacing=30,
+            line_spacing=18,
             align="left",
         )
 
