@@ -19,6 +19,7 @@ import os
 import sys
 import shutil
 import asyncio
+import requests
 from datetime import datetime
 from typing import List, Dict, Any, Optional
 
@@ -36,6 +37,7 @@ from src.features.base_feature import BaseFeature
 from src.features.scraper_feature.scraper import ScraperFeature
 from src.features.llm_feature.llm import LLMFeature
 from src.features.canvas_feature.canvas import CanvasFeature
+from src.features.repliz_feature.repliz import ReplizFeature
 
 
 # ── Constants ──────────────────────────────────────────────────────────
@@ -118,11 +120,13 @@ def run_pipeline(user_prompt: str, output_dir: str) -> List[str]:
 
 # ── Helper: send images to a chat ──────────────────────────────────────
 
-async def _send_images_to_chat(bot: Bot, chat_id: int, output_paths: List[str]):
-    """Send generated images to a Telegram chat."""
+async def _send_images_to_chat(bot: Bot, chat_id: int, output_paths: List[str]) -> List[str]:
+    """Send generated images to a Telegram chat and return their file_ids."""
+    file_ids = []
     if len(output_paths) == 1:
         with open(output_paths[0], "rb") as photo:
-            await bot.send_photo(chat_id=chat_id, photo=photo)
+            msg = await bot.send_photo(chat_id=chat_id, photo=photo)
+            file_ids.append(msg.photo[-1].file_id)
     else:
         # Telegram allows max 10 media per group
         for chunk_start in range(0, len(output_paths), 10):
@@ -132,7 +136,9 @@ async def _send_images_to_chat(bot: Bot, chat_id: int, output_paths: List[str]):
                 with open(path, "rb") as f:
                     photo_bytes = f.read()
                 media_group.append(InputMediaPhoto(media=photo_bytes))
-            await bot.send_media_group(chat_id=chat_id, media=media_group)
+            msgs = await bot.send_media_group(chat_id=chat_id, media=media_group)
+            file_ids.extend([m.photo[-1].file_id for m in msgs])
+    return file_ids
 
 
 async def _send_approval_keyboard(
@@ -142,6 +148,7 @@ async def _send_approval_keyboard(
     user_prompt: str,
     output_dir: str,
     output_paths: List[str],
+    file_ids: List[str],
     user_id: int,
     user_name: str,
     csv_row_index: Optional[int] = None,
@@ -170,6 +177,7 @@ async def _send_approval_keyboard(
         "user_prompt": user_prompt,
         "output_dir": output_dir,
         "output_paths": output_paths,
+        "file_ids": file_ids,
         "user_id": user_id,
         "user_name": user_name,
         "csv_row_index": csv_row_index,
@@ -231,7 +239,7 @@ async def send_scheduled_content(
             parse_mode="Markdown",
         )
 
-        await _send_images_to_chat(bot, chat_id, output_paths)
+        file_ids = await _send_images_to_chat(bot, chat_id, output_paths)
         await _send_approval_keyboard(
             bot=bot,
             chat_id=chat_id,
@@ -239,6 +247,7 @@ async def send_scheduled_content(
             user_prompt=prompt,
             output_dir=output_dir,
             output_paths=output_paths,
+            file_ids=file_ids,
             user_id=user_id,
             user_name=user_name,
             csv_row_index=csv_row_index,
@@ -361,7 +370,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
         # Send images + approval buttons
-        await _send_images_to_chat(update.get_bot(), chat_id, output_paths)
+        file_ids = await _send_images_to_chat(update.get_bot(), chat_id, output_paths)
         await _send_approval_keyboard(
             bot=update.get_bot(),
             chat_id=chat_id,
@@ -369,6 +378,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             user_prompt=user_prompt,
             output_dir=output_dir,
             output_paths=output_paths,
+            file_ids=file_ids,
             user_id=user_id,
             user_name=user_name,
         )
@@ -416,12 +426,88 @@ async def handle_approval_callback(update: Update, context: ContextTypes.DEFAULT
     if action == "approve":
         print(f"  ✅ Content APPROVED by {user_name} (ID: {user_id})")
 
+        # Call Repliz to get accounts
+        repliz = ReplizFeature()
+        accounts = repliz.get_accounts()
+
+        if not accounts:
+            await query.edit_message_text(
+                "✅ *Content Approved!*\n\n⚠️ No connected Repliz accounts found! "
+                "Please configure your REPLIZ_ACCESS_KEY.",
+                parse_mode="Markdown",
+            )
+            # Finish cleanly since we can't post
+            if csv_row_index is not None and scheduler:
+                now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                scheduler.update_csv_status(csv_row_index, "approved", now_str)
+
+            if os.path.exists(output_dir):
+                shutil.rmtree(output_dir, ignore_errors=True)
+            del pending_approvals[session_key]
+            return
+
+        # Create inline keyboard for account selection
+        keyboard = []
+        for acc in accounts:
+            keyboard.append([InlineKeyboardButton(f"📱 {acc['name']} ({acc['type']})", callback_data=f"repliz_{acc['_id']}")])
+
+        if len(accounts) > 1:
+            keyboard.append([InlineKeyboardButton("🌐 Post to All Accounts", callback_data="repliz_all")])
+
+        keyboard.append([InlineKeyboardButton("❌ Cancel Posting", callback_data="repliz_cancel")])
+
         await query.edit_message_text(
             "✅ *Content Approved!*\n\n"
-            "The content has been approved and is ready to post.\n"
-            "_(Social media posting API will be connected soon)_",
+            "Where would you like to schedule this post? (It will post instantly)",
             parse_mode="Markdown",
+            reply_markup=InlineKeyboardMarkup(keyboard),
         )
+
+    # ── Repliz Action ──────────────────────────────────────────────────
+    elif action.startswith("repliz_"):
+        target = action.replace("repliz_", "")
+        if target == "cancel":
+            await query.edit_message_text("❌ Scheduled posting cancelled (Content remains approved).", parse_mode="Markdown")
+        else:
+            await query.edit_message_text("⏳ *Publishing via Repliz...*", parse_mode="Markdown")
+
+            repliz = ReplizFeature()
+            accounts = repliz.get_accounts()
+            account_ids = []
+            if target == "all":
+                account_ids = [acc["_id"] for acc in accounts]
+            else:
+                account_ids = [target]
+
+            # Upload local files to Catbox.moe for public URLs accessible by Facebook
+            file_urls = []
+            for path in session.get("output_paths", []):
+                try:
+                    with open(path, "rb") as f:
+                        resp = requests.post(
+                            "https://catbox.moe/user/api.php", 
+                            data={"reqtype": "fileupload"}, 
+                            files={"fileToUpload": f}
+                        )
+                        resp.raise_for_status()
+                        url = resp.text.strip()
+                        file_urls.append({"type": "image", "url": url})
+                except Exception as e:
+                    print(f"Error uploading file {path} to catbox: {e}")
+
+            if file_urls:
+                # Text for posting = user's prompt (or we could extract title from LLM batch... but user prompt is safer)
+                success = repliz.create_schedule(
+                    account_ids,
+                    text=user_prompt,
+                    media_urls=file_urls
+                )
+                if success:
+                    await query.edit_message_text("✅ *Successfully posted to social media via Repliz!*", parse_mode="Markdown")
+                else:
+                    await query.edit_message_text("❌ *Failed to post. Check logs for details.*", parse_mode="Markdown")
+            else:
+                await query.edit_message_text("❌ *No valid images found to post.*", parse_mode="Markdown")
 
         # Update CSV if this was a scheduled job
         if csv_row_index is not None and scheduler:
@@ -496,8 +582,7 @@ async def handle_approval_callback(update: Update, context: ContextTypes.DEFAULT
                 return
 
             # Send new images + new approval buttons
-            bot = query.get_bot()
-            await _send_images_to_chat(bot, chat_id, new_output_paths)
+            file_ids = await _send_images_to_chat(bot, chat_id, new_output_paths)
             await _send_approval_keyboard(
                 bot=bot,
                 chat_id=chat_id,
@@ -505,6 +590,7 @@ async def handle_approval_callback(update: Update, context: ContextTypes.DEFAULT
                 user_prompt=user_prompt,
                 output_dir=new_output_dir,
                 output_paths=new_output_paths,
+                file_ids=file_ids,
                 user_id=user_id,
                 user_name=user_name,
                 csv_row_index=csv_row_index,
