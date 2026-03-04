@@ -673,5 +673,18 @@ class TelegramBotFeature(BaseFeature):
 
             app.post_init = post_init
 
-        # Start long-polling
-        app.run_polling(allowed_updates=Update.ALL_TYPES)
+        render_external_url = os.getenv("RENDER_EXTERNAL_URL")
+
+        if render_external_url:
+            port = int(os.getenv("PORT", "10000"))
+            print(f"🤖 Content Builder bot is starting webhook on port {port}...")
+            app.run_webhook(
+                listen="0.0.0.0",
+                port=port,
+                webhook_url=render_external_url,
+                allowed_updates=Update.ALL_TYPES
+            )
+        else:
+            print("🤖 Content Builder bot is running in polling mode...")
+            # Start long-polling
+            app.run_polling(allowed_updates=Update.ALL_TYPES)
