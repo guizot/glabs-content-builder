@@ -590,6 +590,7 @@ async def handle_approval_callback(update: Update, context: ContextTypes.DEFAULT
                 return
 
             # Send new images + new approval buttons
+            bot = update.get_bot()
             file_ids = await _send_images_to_chat(bot, chat_id, new_output_paths)
             await _send_approval_keyboard(
                 bot=bot,
