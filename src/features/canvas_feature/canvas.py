@@ -71,6 +71,11 @@ LIMITS = {
     # --- Instagram Feed (1080x1080) ---
     ("instagram_feed", "hook"):    {"hook_text": 100},
     ("instagram_feed", "content"): {"title": 70, "description": 350},
+
+    # --- CTA (all ratios) ---
+    ("instagram_post", "cta"):  {"subtitle": 40, "cta_text": 120},
+    ("instagram_story", "cta"): {"subtitle": 40, "cta_text": 120},
+    ("instagram_feed", "cta"):  {"subtitle": 40, "cta_text": 120},
 }
 
 

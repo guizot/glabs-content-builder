@@ -22,6 +22,11 @@ TEMPLATE_REGISTRY = {
     ("instagram_story", "content", "design2"): "src.features.canvas_feature.templates.instagram_story.content.design2.ContentDesign2",
     ("instagram_feed", "hook", "design2"): "src.features.canvas_feature.templates.instagram_feed.hook.design2.HookDesign2",
     ("instagram_feed", "content", "design2"): "src.features.canvas_feature.templates.instagram_feed.content.design2.ContentDesign2",
+
+    # CTA Design 2
+    ("instagram_post", "cta", "design2"): "src.features.canvas_feature.templates.instagram_post.cta.design2.CtaDesign2",
+    ("instagram_story", "cta", "design2"): "src.features.canvas_feature.templates.instagram_story.cta.design2.CtaDesign2",
+    ("instagram_feed", "cta", "design2"): "src.features.canvas_feature.templates.instagram_feed.cta.design2.CtaDesign2",
 }
 
 
