@@ -76,13 +76,35 @@ class ContentDesign2:
             align="left",
         )
 
-        # --- Footer Text ---
+        # --- Footer ---
         footer_font = load_font("poppins_regular", 32)
-        footer_text = "@glabs.ai"
-        footer_w = draw.textlength(footer_text, font=footer_font)
-        draw.text((self.width - padding_x - footer_w, self.height - 130), footer_text, fill=text_white, font=footer_font)
+        footer_y = self.height - 130
 
-        # --- Bottom decoration ---
-        draw.rectangle([padding_x, self.height - 100, padding_x + 60, self.height - 92], fill=text_white)
+        # Bottom left
+        draw.text((padding_x, footer_y), "@glabs.ai", fill=text_white, font=footer_font)
+
+        # Bottom right: Swipe ->
+        swipe_text = "Swipe"
+        swipe_w = draw.textlength(swipe_text, font=footer_font)
+        arrow_gap = 12
+        arrow_len = 40
+        arrow_head = 10
+        total_swipe_w = swipe_w + arrow_gap + arrow_len
+
+        swipe_x = self.width - padding_x - total_swipe_w
+        draw.text((swipe_x, footer_y), swipe_text, fill=text_white, font=footer_font)
+
+        # Arrow
+        bbox = draw.textbbox((0, 0), "S", font=footer_font)
+        arrow_y = footer_y + (bbox[3] - bbox[1]) // 2 + bbox[1]
+        
+        arrow_start_x = swipe_x + swipe_w + arrow_gap
+        arrow_end_x = arrow_start_x + arrow_len
+
+        line_w = 2
+        draw.line([arrow_start_x, arrow_y, arrow_end_x, arrow_y], fill=text_white, width=line_w)
+        draw.line([arrow_end_x - arrow_head, arrow_y - arrow_head + 3, arrow_end_x, arrow_y], fill=text_white, width=line_w)
+        draw.line([arrow_end_x - arrow_head, arrow_y + arrow_head - 3, arrow_end_x, arrow_y], fill=text_white, width=line_w)
+
 
         return img
