@@ -44,7 +44,7 @@ class CtaDesign2:
         # --- Subtitle (centered) ---
         subtitle_text = self.content.get("subtitle", "")
         subtitle_font = load_font("poppins_regular", 38)
-        text_area_width = self.width - 240
+        text_area_width = self.width - 180
 
         if subtitle_text:
             subtitle_lines = wrap_text(subtitle_text, subtitle_font, text_area_width)
@@ -55,7 +55,7 @@ class CtaDesign2:
 
         # --- CTA Text (large, bold, centered) ---
         cta_text = self.content.get("cta_text", "Your CTA Text Here")
-        cta_font = load_font("poppins_bold", 88)
+        cta_font = load_font("poppins_bold", 80)
         cta_lines = wrap_text(cta_text, cta_font, text_area_width)
         cta_height = get_text_height(cta_lines, cta_font, line_spacing=10)
 
@@ -94,7 +94,7 @@ class CtaDesign2:
         if subtitle_lines:
             draw_text_block(
                 draw, subtitle_lines, subtitle_font,
-                x=120, y=current_y,
+                x=90, y=current_y,
                 color=text_white, line_spacing=8,
                 align="center", max_width=text_area_width,
             )
@@ -103,7 +103,7 @@ class CtaDesign2:
         # Draw CTA text
         draw_text_block(
             draw, cta_lines, cta_font,
-            x=120, y=current_y,
+            x=90, y=current_y,
             color=text_white, line_spacing=10,
             align="center", max_width=text_area_width,
         )
