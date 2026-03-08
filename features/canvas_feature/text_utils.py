@@ -16,6 +16,11 @@ FONT_FILES = {
     "poppins_medium": "Poppins-Medium.ttf",
     "poppins_semibold": "Poppins-SemiBold.ttf",
     "poppins_bold": "Poppins-Bold.ttf",
+    "poppins_italic": "Poppins-Italic.ttf",
+    "poppins_bolditalic": "Poppins-BoldItalic.ttf",
+    "poppins_mediumitalic": "Poppins-MediumItalic.ttf",
+    "poppins_semibolditalic": "Poppins-SemiBoldItalic.ttf",
+    "poppins_lightitalic": "Poppins-LightItalic.ttf",
     "inter": "Inter-Variable.ttf",
 }
 

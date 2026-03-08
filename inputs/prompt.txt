@@ -1,1 +1,2 @@
-generate instagram feed, 1 hook, 2 content slides, and 1 CTA slide about cat. generate image header for hook about cat. use design2 for all slides.
+generate instagram post, 1 quote from c lewis and 1 cta that follow for more and save and share.
+use design2 for all slides.
