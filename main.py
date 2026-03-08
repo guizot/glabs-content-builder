@@ -2,10 +2,10 @@
 Content Builder v2 — Plug-and-Play Modular Orchestrator
 
 Usage (Generate JSON + Images from prompt):
-    python main.py --prompt src/inputs/prompt.txt
+    python main.py --prompt inputs/prompt.txt
 
 Usage (Generate Images strictly from existing JSON file):
-    python main.py --input src/inputs/sample_batch.json
+    python main.py --input inputs/sample_batch.json
 
 Usage (Launch Telegram Bot):
     python main.py --telegram
@@ -17,14 +17,14 @@ import os
 import json
 from datetime import datetime
 
-# Ensure the project root is in the path so `src.` imports work
+# Ensure the project root is in the path so `features.` imports work
 sys.path.insert(0, os.path.dirname(__file__))
 
-from src.features.scraper_feature.scraper import ScraperFeature
-from src.features.llm_feature.llm import LLMFeature
-from src.features.canvas_feature.canvas import CanvasFeature
-from src.features.telegram_feature.telegram_bot import TelegramBotFeature
-from src.features.image_gen_feature.image_gen import ImageGenFeature
+from features.scraper_feature.scraper import ScraperFeature
+from features.llm_feature.llm import LLMFeature
+from features.canvas_feature.canvas import CanvasFeature
+from features.telegram_feature.telegram_bot import TelegramBotFeature
+from features.image_gen_feature.image_gen import ImageGenFeature
 
 
 def validate_file(path: str) -> None:
@@ -72,7 +72,7 @@ def full_generation_pipeline(prompt_path: str, output_dir: str):
 
     # # Save generated JSON for caching / review
     # timestamp_for_file = datetime.now().strftime("%Y%m%d_%H%M%S")
-    # json_out_path = f"src/inputs/generated_{timestamp_for_file}.json"
+    # json_out_path = f"inputs/generated_{timestamp_for_file}.json"
     # 
     # with open(json_out_path, "w", encoding="utf-8") as f:
     #     json.dump(batch_data, f, indent=4)
@@ -177,7 +177,7 @@ def main():
         from dotenv import load_dotenv
         load_dotenv()
 
-        from src.features.scheduler_feature.scheduler import SchedulerFeature
+        from features.scheduler_feature.scheduler import SchedulerFeature
 
         chat_id = os.environ.get("TELEGRAM_CHAT_ID", "")
         scheduler = SchedulerFeature()
