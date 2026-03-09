@@ -81,6 +81,11 @@ LIMITS = {
     ("instagram_post", "quote"):  {"subtitle": 40, "cta_text": 70},
     ("instagram_story", "quote"): {"subtitle": 40, "cta_text": 85},
     ("instagram_feed", "quote"):  {"subtitle": 40, "cta_text": 60},
+
+    # --- Promote (all ratios) ---
+    ("instagram_post", "promote"): {"title": 100, "description": 550},
+    ("instagram_story", "promote"): {"title": 120, "description": 650},
+    ("instagram_feed", "promote"): {"title": 90, "description": 450},
 }
 
 

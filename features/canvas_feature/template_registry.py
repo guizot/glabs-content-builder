@@ -42,6 +42,16 @@ TEMPLATE_REGISTRY = {
     ("instagram_post", "quote", "design2"): "features.canvas_feature.templates.instagram_post.quote.design2.QuoteDesign2",
     ("instagram_story", "quote", "design2"): "features.canvas_feature.templates.instagram_story.quote.design2.QuoteDesign2",
     ("instagram_feed", "quote", "design2"): "features.canvas_feature.templates.instagram_feed.quote.design2.QuoteDesign2",
+
+    # Promote Design 1
+    ("instagram_post", "promote", "design1"): "features.canvas_feature.templates.instagram_post.promote.design1.PromoteDesign1",
+    ("instagram_story", "promote", "design1"): "features.canvas_feature.templates.instagram_story.promote.design1.PromoteDesign1",
+    ("instagram_feed", "promote", "design1"): "features.canvas_feature.templates.instagram_feed.promote.design1.PromoteDesign1",
+
+    # Promote Design 2
+    ("instagram_post", "promote", "design2"): "features.canvas_feature.templates.instagram_post.promote.design2.PromoteDesign2",
+    ("instagram_story", "promote", "design2"): "features.canvas_feature.templates.instagram_story.promote.design2.PromoteDesign2",
+    ("instagram_feed", "promote", "design2"): "features.canvas_feature.templates.instagram_feed.promote.design2.PromoteDesign2",
 }
 
 
