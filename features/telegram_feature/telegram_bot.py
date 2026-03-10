@@ -497,21 +497,35 @@ async def handle_approval_callback(update: Update, context: ContextTypes.DEFAULT
             else:
                 account_ids = [target]
 
-            # Upload local files to Catbox.moe for public URLs accessible by Facebook
+            # Upload local files for public URLs accessible by Facebook
+            # Upload local files for public URLs accessible by Facebook using ImgBB
+            imgbb_api_key = os.environ.get("IMGBB_API_KEY", "")
             file_urls = []
+            
             for path in session.get("output_paths", []):
+                uploaded_url = None
+                
                 try:
                     with open(path, "rb") as f:
-                        resp = requests.post(
-                            "https://catbox.moe/user/api.php", 
-                            data={"reqtype": "fileupload"}, 
-                            files={"fileToUpload": f}
-                        )
-                        resp.raise_for_status()
-                        url = resp.text.strip()
-                        file_urls.append({"type": "image", "url": url})
+                        if not imgbb_api_key:
+                            print(f"  ⚠️ IMGBB_API_KEY is missing! Cannot upload to ImgBB.")
+                        else:
+                            print(f"  📤 Uploading to ImgBB (5 min expiration): {path}")
+                            resp = requests.post(
+                                f"https://api.imgbb.com/1/upload?key={imgbb_api_key}",
+                                files={"image": f},
+                                data={"expiration": 300}
+                            )
+                            resp.raise_for_status()
+                            uploaded_url = resp.json().get("data", {}).get("url")
                 except Exception as e:
-                    print(f"Error uploading file {path} to catbox: {e}")
+                    print(f"  ⚠️ Error uploading {path} to ImgBB: {e}")
+
+                if uploaded_url:
+                    print(f"  ✅ Uploaded successfully: {uploaded_url}")
+                    file_urls.append({"type": "image", "url": uploaded_url})
+                else:
+                    print(f"  ❌ Failed to upload {path} to ImgBB.")
 
             if file_urls:
                 # Use LLM-generated caption, fallback to user prompt
