@@ -263,11 +263,13 @@ async def background_repliz_monitor(bot: Bot, chat_id: int, created_schedules: l
     for _ in range(60):
         all_completed = True
         for sched in created_schedules:
-            if sched["status"] == "pending":
-                new_status = repliz.get_schedule_status(sched["schedule_id"])
-                if new_status:
-                    sched["status"] = new_status
-                if sched["status"] == "pending":
+            if sched["status"] not in ("success", "published", "error", "failed"):
+                schedule_data = repliz.get_schedule_status(sched["schedule_id"])
+                if schedule_data:
+                    sched["status"] = schedule_data.get("status", sched["status"])
+                    if schedule_data.get("errorMessage"):
+                        sched["error_message"] = schedule_data.get("errorMessage")
+                if sched["status"] not in ("success", "published", "error", "failed"):
                     all_completed = False
         
         if all_completed:
@@ -276,8 +278,21 @@ async def background_repliz_monitor(bot: Bot, chat_id: int, created_schedules: l
         await asyncio.sleep(10)
         
     # Summarize statuses
-    success_count = sum(1 for s in created_schedules if s["status"] == "success")
+    success_count = sum(1 for s in created_schedules if s["status"] in ("success", "published"))
     error_count = sum(1 for s in created_schedules if s["status"] in ("error", "failed"))
+    
+    # Collect unique error messages
+    error_msgs = []
+    for s in created_schedules:
+        if s["status"] in ("error", "failed") and s.get("error_message"):
+            msg = str(s["error_message"]).replace("`", "'")
+            if msg not in error_msgs:
+                error_msgs.append(msg)
+                
+    errors_text = ""
+    if error_msgs:
+        errors_joined = "\n".join([f"• `{err}`" for err in error_msgs])
+        errors_text = f"\n\n*Errors:*\n{errors_joined}"
     
     short_prompt = user_prompt[:50] + ("..." if len(user_prompt) > 50 else "")
     
@@ -290,19 +305,19 @@ async def background_repliz_monitor(bot: Bot, chat_id: int, created_schedules: l
     elif error_count > 0 and success_count > 0:
         await bot.send_message(
            chat_id=chat_id,
-           text=f"⚠️ *Repliz Publish Partially Failed.*\n{success_count} succeeded, {error_count} failed for:\n_{short_prompt}_",
+           text=f"⚠️ *Repliz Publish Partially Failed.*\n{success_count} succeeded, {error_count} failed for:\n_{short_prompt}_{errors_text}",
            parse_mode="Markdown"
         )
     elif error_count == len(created_schedules):
         await bot.send_message(
            chat_id=chat_id,
-           text=f"❌ *Repliz Publish Failed.*\nCould not post to any accounts for:\n_{short_prompt}_",
+           text=f"❌ *Repliz Publish Failed.*\nCould not post to any accounts for:\n_{short_prompt}_{errors_text}",
            parse_mode="Markdown"
         )
     else:
         await bot.send_message(
            chat_id=chat_id,
-           text=f"⏳ *Repliz Publish Timeout.*\nThe post is still pending after 10 minutes for:\n_{short_prompt}_",
+           text=f"⏳ *Repliz Publish Timeout.*\nThe post is still pending after 10 minutes for:\n_{short_prompt}_{errors_text}",
            parse_mode="Markdown"
         )
 

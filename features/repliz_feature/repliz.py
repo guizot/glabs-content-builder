@@ -98,7 +98,7 @@ class ReplizFeature(BaseFeature):
             resp = requests.get(url, auth=self._get_auth())
             resp.raise_for_status()
             data = resp.json()
-            return data.get("status")
+            return data
         except Exception as e:
             print(f"❌ Repliz Error: Could not fetch schedule status for {schedule_id} - {e}")
             return None
