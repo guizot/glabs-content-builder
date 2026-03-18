@@ -17,6 +17,12 @@ import os
 import json
 from datetime import datetime
 
+# Force unbuffered output so logs show up immediately in platforms like Render/Docker
+if hasattr(sys.stdout, 'reconfigure'):
+    sys.stdout.reconfigure(line_buffering=True)
+if hasattr(sys.stderr, 'reconfigure'):
+    sys.stderr.reconfigure(line_buffering=True)
+
 # Ensure the project root is in the path so `features.` imports work
 sys.path.insert(0, os.path.dirname(__file__))
 
