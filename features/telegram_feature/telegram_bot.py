@@ -588,11 +588,12 @@ async def handle_approval_callback(update: Update, context: ContextTypes.DEFAULT
                     if not imgbb_api_key:
                         print(f"  ⚠️ IMGBB_API_KEY is missing! Cannot upload to ImgBB.")
                     else:
-                        print(f"  📤 Uploading to ImgBB (5 min expiration): {path}")
+                        print(f"  📤 Uploading to ImgBB (1 hour expiration): {path}")
                         filename, f_buffer, mime_type = compress_image_for_upload(path)
                         resp = requests.post(
                             f"https://api.imgbb.com/1/upload?key={imgbb_api_key}",
-                            files={"image": (filename, f_buffer, mime_type)}
+                            files={"image": (filename, f_buffer, mime_type)},
+                            data={"expiration": 3600}
                         )
                         resp.raise_for_status()
                         uploaded_url = resp.json().get("data", {}).get("url")
@@ -601,7 +602,12 @@ async def handle_approval_callback(update: Update, context: ContextTypes.DEFAULT
 
                 if uploaded_url:
                     print(f"  ✅ Uploaded successfully: {uploaded_url}")
-                    file_urls.append({"type": "image", "url": uploaded_url})
+                    # Repliz schema requires 'thumbnail' along with 'url'
+                    file_urls.append({
+                        "type": "image",
+                        "url": uploaded_url,
+                        "thumbnail": uploaded_url
+                    })
                 else:
                     print(f"  ❌ Failed to upload {path} to ImgBB.")
 
