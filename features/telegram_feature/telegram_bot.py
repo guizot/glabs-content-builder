@@ -19,7 +19,9 @@ import os
 import sys
 import shutil
 import asyncio
+import io
 import requests
+from PIL import Image
 from datetime import datetime
 from typing import List, Dict, Any, Optional
 
@@ -39,6 +41,51 @@ from features.llm_feature.llm import LLMFeature
 from features.canvas_feature.canvas import CanvasFeature
 from features.repliz_feature.repliz import ReplizFeature
 from features.image_gen_feature.image_gen import ImageGenFeature
+
+
+def compress_image_for_upload(image_path: str, max_size_mb: float = 2.0, quality: int = 85) -> tuple:
+    """
+    Read an image, compress it if it exceeds max_size_mb, and return 
+    a tuple of (filename, BytesIO_buffer, mime_type) suitable for requests.
+    """
+    file_size_mb = os.path.getsize(image_path) / (1024 * 1024)
+    buffer = io.BytesIO()
+
+    if file_size_mb <= max_size_mb:
+        with open(image_path, "rb") as f:
+            buffer.write(f.read())
+        filename = os.path.basename(image_path)
+        mime_type = "image/png" if filename.lower().endswith(".png") else "image/jpeg"
+    else:
+        print(f"  🗜 Compressing {image_path} ({file_size_mb:.2f}MB > {max_size_mb}MB)")
+        with Image.open(image_path) as img:
+            if img.mode in ("RGBA", "P"):
+                img = img.convert("RGB")
+            
+            # Initial compression
+            img.save(buffer, format="JPEG", quality=quality, optimize=True)
+            new_size_mb = buffer.tell() / (1024 * 1024)
+            
+            scale = 1.0
+            temp_img = img
+            # Iteratively scale down if still too large
+            while new_size_mb > max_size_mb and scale > 0.3:
+                scale -= 0.15
+                new_width = int(img.width * scale)
+                new_height = int(img.height * scale)
+                temp_img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
+                
+                buffer.seek(0)
+                buffer.truncate()
+                temp_img.save(buffer, format="JPEG", quality=quality, optimize=True)
+                new_size_mb = buffer.tell() / (1024 * 1024)
+
+        filename = "image_compressed.jpg"
+        mime_type = "image/jpeg"
+        print(f"  ✅ Compressed to {new_size_mb:.2f}MB")
+            
+    buffer.seek(0)
+    return filename, buffer, mime_type
 
 
 # ── Constants ──────────────────────────────────────────────────────────
@@ -506,18 +553,18 @@ async def handle_approval_callback(update: Update, context: ContextTypes.DEFAULT
                 uploaded_url = None
                 
                 try:
-                    with open(path, "rb") as f:
-                        if not imgbb_api_key:
-                            print(f"  ⚠️ IMGBB_API_KEY is missing! Cannot upload to ImgBB.")
-                        else:
-                            print(f"  📤 Uploading to ImgBB (5 min expiration): {path}")
-                            resp = requests.post(
-                                f"https://api.imgbb.com/1/upload?key={imgbb_api_key}",
-                                files={"image": f},
-                                data={"expiration": 300}
-                            )
-                            resp.raise_for_status()
-                            uploaded_url = resp.json().get("data", {}).get("url")
+                    if not imgbb_api_key:
+                        print(f"  ⚠️ IMGBB_API_KEY is missing! Cannot upload to ImgBB.")
+                    else:
+                        print(f"  📤 Uploading to ImgBB (5 min expiration): {path}")
+                        filename, f_buffer, mime_type = compress_image_for_upload(path)
+                        resp = requests.post(
+                            f"https://api.imgbb.com/1/upload?key={imgbb_api_key}",
+                            files={"image": (filename, f_buffer, mime_type)},
+                            data={"expiration": 300}
+                        )
+                        resp.raise_for_status()
+                        uploaded_url = resp.json().get("data", {}).get("url")
                 except Exception as e:
                     print(f"  ⚠️ Error uploading {path} to ImgBB: {e}")
 
