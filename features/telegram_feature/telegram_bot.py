@@ -43,46 +43,42 @@ from features.repliz_feature.repliz import ReplizFeature
 from features.image_gen_feature.image_gen import ImageGenFeature
 
 
-def compress_image_for_upload(image_path: str, max_size_mb: float = 2.0, quality: int = 85) -> tuple:
+def compress_image_for_upload(image_path: str, max_size_mb: float = 0.8, quality: int = 80) -> tuple:
     """
-    Read an image, compress it if it exceeds max_size_mb, and return 
-    a tuple of (filename, BytesIO_buffer, mime_type) suitable for requests.
+    Read an image, compress it aggressively as JPEG to ensure Facebook Graph API 
+    doesn't time out during fetch, and return a tuple suitable for requests.
+    Converts everything to JPEG for faster downloads.
     """
-    file_size_mb = os.path.getsize(image_path) / (1024 * 1024)
     buffer = io.BytesIO()
+    
+    with open(image_path, "rb") as f:
+        file_size_mb = os.path.getsize(image_path) / (1024 * 1024)
 
-    if file_size_mb <= max_size_mb:
-        with open(image_path, "rb") as f:
-            buffer.write(f.read())
-        filename = os.path.basename(image_path)
-        mime_type = "image/png" if filename.lower().endswith(".png") else "image/jpeg"
-    else:
-        print(f"  🗜 Compressing {image_path} ({file_size_mb:.2f}MB > {max_size_mb}MB)")
-        with Image.open(image_path) as img:
-            if img.mode in ("RGBA", "P"):
-                img = img.convert("RGB")
+    print(f"  🗜 Compressing {image_path} (Original: {file_size_mb:.2f}MB)")
+    with Image.open(image_path) as img:
+        if img.mode in ("RGBA", "P"):
+            img = img.convert("RGB")
+        
+        # Initial compression attempt
+        img.save(buffer, format="JPEG", quality=quality, optimize=True)
+        new_size_mb = buffer.tell() / (1024 * 1024)
+        
+        scale = 1.0
+        # Iteratively scale down if still too large
+        while new_size_mb > max_size_mb and scale > 0.3:
+            scale -= 0.15
+            new_width = int(img.width * scale)
+            new_height = int(img.height * scale)
+            temp_img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
             
-            # Initial compression
-            img.save(buffer, format="JPEG", quality=quality, optimize=True)
+            buffer.seek(0)
+            buffer.truncate()
+            temp_img.save(buffer, format="JPEG", quality=quality, optimize=True)
             new_size_mb = buffer.tell() / (1024 * 1024)
-            
-            scale = 1.0
-            temp_img = img
-            # Iteratively scale down if still too large
-            while new_size_mb > max_size_mb and scale > 0.3:
-                scale -= 0.15
-                new_width = int(img.width * scale)
-                new_height = int(img.height * scale)
-                temp_img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
-                
-                buffer.seek(0)
-                buffer.truncate()
-                temp_img.save(buffer, format="JPEG", quality=quality, optimize=True)
-                new_size_mb = buffer.tell() / (1024 * 1024)
 
-        filename = "image_compressed.jpg"
-        mime_type = "image/jpeg"
-        print(f"  ✅ Compressed to {new_size_mb:.2f}MB")
+    filename = "image_compressed.jpg"
+    mime_type = "image/jpeg"
+    print(f"  ✅ Compressed to {new_size_mb:.2f}MB as JPEG")
             
     buffer.seek(0)
     return filename, buffer, mime_type
