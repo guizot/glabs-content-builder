@@ -1,5 +1,7 @@
 import os
 import json
+import urllib.request
+import ssl
 from openai import OpenAI
 from dotenv import load_dotenv
 from typing import List, Dict, Any, Union
@@ -14,13 +16,34 @@ class LLMFeature(BaseFeature):
     scraped context, and returning a structured JSON batch using an LLM.
     """
 
+    def _get_top_free_model(self) -> str:
+        """Fetch the most popular free model from OpenRouter frontend API."""
+        url = "https://openrouter.ai/api/frontend/models/find?max_price=0&order=most-popular"
+        try:
+            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+            context = ssl._create_unverified_context()
+            with urllib.request.urlopen(req, context=context, timeout=5) as response:
+                data = json.loads(response.read().decode())
+                
+            models = data.get('data', {}).get('models', [])
+            if models and len(models) > 0:
+                slug = models[0].get('slug')
+                if slug:
+                    return slug
+        except Exception:
+            pass # Silently fail and fallback to environment variable
+        return None
+
     def __init__(self, model: str = None):
         load_dotenv()
-        self.model = model or os.environ.get("OPENAI_MODEL", "arcee-ai/trinity-large-preview:free")
+        fetched_model = self._get_top_free_model()
+        # Prioritize explicitly passed model > OpenRouter API > Environment Variable > Default
+        self.model = model or fetched_model or os.environ.get("OPENAI_MODEL", "stepfun/step-3.5-flash:free")
         self.client = OpenAI(
             api_key=os.environ.get("OPENAI_API_KEY"),
             base_url=os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1"),
         )
+
 
     def execute(self, user_prompt: str, context: str = "") -> Dict[str, Any]:
         """
