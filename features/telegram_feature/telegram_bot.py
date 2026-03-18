@@ -255,6 +255,61 @@ async def _send_approval_keyboard(
 
     print(f"  📋 Approval requested — message_id={approval_msg.message_id}")
 
+async def background_repliz_monitor(bot: Bot, chat_id: int, created_schedules: list, user_prompt: str):
+    """
+    Poll Repliz API in the background and notify chat on completion/error.
+    """
+    from features.repliz_feature.repliz import ReplizFeature
+    repliz = ReplizFeature()
+    all_completed = False
+    
+    # Poll every 10 seconds for up to 10 minutes (60 iterations)
+    for _ in range(60):
+        all_completed = True
+        for sched in created_schedules:
+            if sched["status"] == "pending":
+                new_status = repliz.get_schedule_status(sched["schedule_id"])
+                if new_status:
+                    sched["status"] = new_status
+                if sched["status"] == "pending":
+                    all_completed = False
+        
+        if all_completed:
+            break
+            
+        await asyncio.sleep(10)
+        
+    # Summarize statuses
+    success_count = sum(1 for s in created_schedules if s["status"] == "success")
+    error_count = sum(1 for s in created_schedules if s["status"] in ("error", "failed"))
+    
+    short_prompt = user_prompt[:50] + ("..." if len(user_prompt) > 50 else "")
+    
+    if success_count == len(created_schedules):
+        await bot.send_message(
+           chat_id=chat_id,
+           text=f"✅ *Repliz Publish Successful!*\nAll targeted accounts successfully posted:\n_{short_prompt}_",
+           parse_mode="Markdown"
+        )
+    elif error_count > 0 and success_count > 0:
+        await bot.send_message(
+           chat_id=chat_id,
+           text=f"⚠️ *Repliz Publish Partially Failed.*\n{success_count} succeeded, {error_count} failed for:\n_{short_prompt}_",
+           parse_mode="Markdown"
+        )
+    elif error_count == len(created_schedules):
+        await bot.send_message(
+           chat_id=chat_id,
+           text=f"❌ *Repliz Publish Failed.*\nCould not post to any accounts for:\n_{short_prompt}_",
+           parse_mode="Markdown"
+        )
+    else:
+        await bot.send_message(
+           chat_id=chat_id,
+           text=f"⏳ *Repliz Publish Timeout.*\nThe post is still pending after 10 minutes for:\n_{short_prompt}_",
+           parse_mode="Markdown"
+        )
+
 
 # ── Public helper for scheduler ────────────────────────────────────────
 
@@ -622,39 +677,16 @@ async def handle_approval_callback(update: Update, context: ContextTypes.DEFAULT
                 
                 if created_schedules:
                     await query.edit_message_text(
-                        "⏳ *Publishing via Repliz... Waiting for status confirmation...*",
+                        "⏳ *Publishing via Repliz... I'll send a new message when it's done.*",
                         parse_mode="Markdown"
                     )
                     
-                    # Poll for completion (up to 12 x 5s = 60s)
-                    all_completed = False
-                    loop_count = 0
-                    while not all_completed and loop_count < 12:
-                        all_completed = True
-                        for sched in created_schedules:
-                            if sched["status"] == "pending":
-                                new_status = repliz.get_schedule_status(sched["schedule_id"])
-                                if new_status:
-                                    sched["status"] = new_status
-                                if sched["status"] == "pending":
-                                    all_completed = False
-                        
-                        if not all_completed:
-                            await asyncio.sleep(5)
-                            loop_count += 1
-
-                    # Summarize statuses
-                    success_count = sum(1 for s in created_schedules if s["status"] == "success")
-                    error_count = sum(1 for s in created_schedules if s["status"] in ("error", "failed"))
-                    
-                    if success_count == len(created_schedules):
-                        await query.edit_message_text("✅ *Successfully posted to social media via Repliz!*", parse_mode="Markdown")
-                    elif error_count > 0 and success_count > 0:
-                        await query.edit_message_text(f"⚠️ *Posted partially.* {success_count} success, {error_count} failed.", parse_mode="Markdown")
-                    elif error_count == len(created_schedules):
-                        await query.edit_message_text("❌ *Failed to post. Check Repliz logs for details.*", parse_mode="Markdown")
-                    else:
-                        await query.edit_message_text(f"⏳ *Post scheduled! Current status pending. Check Repliz for updates.*", parse_mode="Markdown")
+                    asyncio.create_task(background_repliz_monitor(
+                        bot=context.bot,
+                        chat_id=chat_id,
+                        created_schedules=created_schedules,
+                        user_prompt=user_prompt
+                    ))
                 else:
                     await query.edit_message_text("❌ *Failed to create schedule. Check logs for details.*", parse_mode="Markdown")
             else:
