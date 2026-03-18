@@ -16,6 +16,7 @@ Commands:
 """
 
 import os
+import csv
 import sys
 import shutil
 import asyncio
@@ -815,6 +816,145 @@ async def handle_approval_callback(update: Update, context: ContextTypes.DEFAULT
                 shutil.rmtree(new_output_dir, ignore_errors=True)
 
 
+# ── Cron-job.org trigger helpers ─────────────────────────────────────
+
+async def _fire_scheduled_slot(
+    bot,
+    chat_id: int,
+    slot_str: str,
+    scheduler,
+) -> bool:
+    """
+    Find today's pending CSV row for the given slot (e.g. '08:00') in WIB
+    and fire the content pipeline.
+    Returns True if a job was found and fired, False otherwise.
+    """
+    try:
+        from zoneinfo import ZoneInfo
+        wib = ZoneInfo("Asia/Jakarta")
+    except ImportError:
+        import datetime as _dt
+        # Fallback: assume server is already in WIB or use UTC+7 offset
+        wib = _dt.timezone(_dt.timedelta(hours=7))
+
+    now_wib = datetime.now(tz=wib)
+    date_str = now_wib.strftime("%Y-%m-%d")
+    target_time = f"{date_str} {slot_str}"
+
+    csv_path = os.path.join("inputs", "schedule.csv")
+    if not os.path.exists(csv_path):
+        print(f"  ⚠️  schedule.csv not found at {csv_path}")
+        return False
+
+    with open(csv_path, "r", encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        for i, row in enumerate(reader):
+            status = (row.get("status") or "").strip().lower()
+            scheduled_time = (row.get("scheduled_time") or "").strip()
+            prompt = (row.get("prompt") or "").strip()
+
+            if status == "pending" and scheduled_time == target_time and prompt:
+                print(f"  🔔 Trigger matched: row {i+1} → {target_time}")
+                asyncio.create_task(
+                    send_scheduled_content(
+                        bot=bot,
+                        chat_id=chat_id,
+                        prompt=prompt,
+                        csv_row_index=i,
+                        scheduler=scheduler,
+                    )
+                )
+                return True
+
+    print(f"  ⚠️  No pending row found for {target_time}")
+    return False
+
+
+async def _run_render_server(
+    tg_app,
+    scheduler,
+    chat_id: str,
+    port: int,
+    webhook_url: str,
+):
+    """
+    Manual aiohttp server that handles both Telegram webhook (POST /)
+    and cron-job.org trigger (GET /trigger) on Render's single $PORT.
+    """
+    from aiohttp import web
+    from telegram import Update
+
+    cron_secret = os.environ.get("CRON_SECRET", "")
+    chat_id_int = int(chat_id) if chat_id else None
+
+    # Initialize Telegram application and set webhook
+    await tg_app.initialize()
+    await tg_app.start()
+    await tg_app.bot.set_webhook(
+        url=webhook_url,
+        allowed_updates=Update.ALL_TYPES,
+    )
+    print(f"  ✅ Webhook set: {webhook_url}")
+
+    # Start APScheduler if provided
+    if scheduler and chat_id_int:
+        await scheduler.start(tg_app.bot, chat_id_int)
+
+    # ── Route handlers ────────────────────────────────────────────────
+
+    async def tg_webhook_handler(request):
+        try:
+            data = await request.json()
+            update = Update.de_json(data, tg_app.bot)
+            await tg_app.process_update(update)
+        except Exception as e:
+            print(f"  ❌ Webhook handler error: {e}")
+        return web.Response(text="OK")
+
+    async def trigger_handler(request):
+        # Security check
+        if cron_secret:
+            key = request.query.get("key", "")
+            if key != cron_secret:
+                print("  ⛔ Trigger rejected: invalid key")
+                return web.Response(status=403, text="Forbidden")
+
+        slot = request.query.get("slot", "")
+        if not slot:
+            return web.Response(status=400, text="Missing ?slot= parameter (e.g. slot=08:00)")
+
+        print(f"\n{'='*50}")
+        print(f"  🔔 CRON TRIGGER — slot={slot}")
+        print(f"{'='*50}")
+
+        if not chat_id_int:
+            return web.Response(status=500, text="TELEGRAM_CHAT_ID not configured")
+
+        fired = await _fire_scheduled_slot(tg_app.bot, chat_id_int, slot, scheduler)
+        if fired:
+            return web.Response(text="OK")
+        return web.Response(status=404, text=f"No pending job found for slot={slot} today")
+
+    # ── Build and start the aiohttp server ───────────────────────────
+
+    aio_app = web.Application()
+    aio_app.router.add_post("/", tg_webhook_handler)
+    aio_app.router.add_get("/trigger", trigger_handler)
+
+    runner = web.AppRunner(aio_app)
+    await runner.setup()
+    site = web.TCPSite(runner, "0.0.0.0", port)
+    await site.start()
+
+    print(f"\n🌐 Server listening on port {port}")
+    print(f"   Telegram webhook : POST /")
+    print(f"   Cron trigger     : GET  /trigger?slot=<HH:MM>&key=<secret>")
+    print()
+
+    # Block forever
+    await asyncio.Event().wait()
+
+
 # ── Feature class (follows BaseFeature pattern) ───────────────────────
 
 class TelegramBotFeature(BaseFeature):
@@ -876,14 +1016,14 @@ class TelegramBotFeature(BaseFeature):
 
         if render_external_url:
             port = int(os.getenv("PORT", "10000"))
-            print(f"🤖 Content Builder bot is starting webhook on port {port}...")
-            app.run_webhook(
-                listen="0.0.0.0",
+            print(f"🤖 Content Builder bot starting on port {port} (webhook mode)...")
+            asyncio.run(_run_render_server(
+                tg_app=app,
+                scheduler=scheduler,
+                chat_id=chat_id,
                 port=port,
                 webhook_url=render_external_url,
-                allowed_updates=Update.ALL_TYPES
-            )
+            ))
         else:
             print("🤖 Content Builder bot is running in polling mode...")
-            # Start long-polling
             app.run_polling(allowed_updates=Update.ALL_TYPES)
