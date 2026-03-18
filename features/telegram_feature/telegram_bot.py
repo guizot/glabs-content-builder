@@ -118,6 +118,12 @@ APPROVAL_KEYBOARD = InlineKeyboardMarkup([
     ],
 ])
 
+RETRY_KEYBOARD = InlineKeyboardMarkup([
+    [
+        InlineKeyboardButton("🔄 Regenerate", callback_data="regenerate"),
+    ],
+])
+
 # ── In-memory pending approval store ──────────────────────────────────
 # Key: (chat_id, approval_message_id) → dict with session info
 pending_approvals: Dict[tuple, Dict[str, Any]] = {}
@@ -290,9 +296,23 @@ async def send_scheduled_content(
             await bot.edit_message_text(
                 chat_id=chat_id,
                 message_id=status_msg.message_id,
-                text="❌ *Scheduled generation failed.*\nCould not produce content.",
+                text="❌ *Scheduled generation failed.*\n"
+                     "Could not produce content. "
+                     "You can try regenerating manually.",
                 parse_mode="Markdown",
+                reply_markup=RETRY_KEYBOARD,
             )
+            pending_approvals[(chat_id, status_msg.message_id)] = {
+                "user_prompt": prompt,
+                "output_dir": output_dir,
+                "output_paths": [],
+                "file_ids": [],
+                "user_id": user_id,
+                "user_name": user_name,
+                "csv_row_index": csv_row_index,
+                "scheduler": scheduler,
+                "generated_caption": "",
+            }
             return
 
         await bot.edit_message_text(
@@ -422,9 +442,21 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await status_msg.edit_text(
                 "❌ *Generation failed.*\n"
                 "The AI could not produce valid content from your prompt. "
-                "Please try rephrasing.",
+                "You can try regenerating or send a new prompt.",
                 parse_mode="Markdown",
+                reply_markup=RETRY_KEYBOARD,
             )
+            pending_approvals[(chat_id, status_msg.message_id)] = {
+                "user_prompt": user_prompt,
+                "output_dir": output_dir,
+                "output_paths": [],
+                "file_ids": [],
+                "user_id": user_id,
+                "user_name": user_name,
+                "csv_row_index": None,
+                "scheduler": None,
+                "generated_caption": "",
+            }
             return
 
         # Update status
@@ -560,8 +592,7 @@ async def handle_approval_callback(update: Update, context: ContextTypes.DEFAULT
                         filename, f_buffer, mime_type = compress_image_for_upload(path)
                         resp = requests.post(
                             f"https://api.imgbb.com/1/upload?key={imgbb_api_key}",
-                            files={"image": (filename, f_buffer, mime_type)},
-                            data={"expiration": 300}
+                            files={"image": (filename, f_buffer, mime_type)}
                         )
                         resp.raise_for_status()
                         uploaded_url = resp.json().get("data", {}).get("url")
@@ -577,15 +608,49 @@ async def handle_approval_callback(update: Update, context: ContextTypes.DEFAULT
             if file_urls:
                 # Use LLM-generated caption, fallback to user prompt
                 final_text = session.get("generated_caption") or user_prompt
-                success = repliz.create_schedule(
+                created_schedules = repliz.create_schedule(
                     account_ids,
                     text=final_text,
                     media_urls=file_urls
                 )
-                if success:
-                    await query.edit_message_text("✅ *Successfully posted to social media via Repliz!*", parse_mode="Markdown")
+                
+                if created_schedules:
+                    await query.edit_message_text(
+                        "⏳ *Publishing via Repliz... Waiting for status confirmation...*",
+                        parse_mode="Markdown"
+                    )
+                    
+                    # Poll for completion (up to 12 x 5s = 60s)
+                    all_completed = False
+                    loop_count = 0
+                    while not all_completed and loop_count < 12:
+                        all_completed = True
+                        for sched in created_schedules:
+                            if sched["status"] == "pending":
+                                new_status = repliz.get_schedule_status(sched["schedule_id"])
+                                if new_status:
+                                    sched["status"] = new_status
+                                if sched["status"] == "pending":
+                                    all_completed = False
+                        
+                        if not all_completed:
+                            await asyncio.sleep(5)
+                            loop_count += 1
+
+                    # Summarize statuses
+                    success_count = sum(1 for s in created_schedules if s["status"] == "success")
+                    error_count = sum(1 for s in created_schedules if s["status"] in ("error", "failed"))
+                    
+                    if success_count == len(created_schedules):
+                        await query.edit_message_text("✅ *Successfully posted to social media via Repliz!*", parse_mode="Markdown")
+                    elif error_count > 0 and success_count > 0:
+                        await query.edit_message_text(f"⚠️ *Posted partially.* {success_count} success, {error_count} failed.", parse_mode="Markdown")
+                    elif error_count == len(created_schedules):
+                        await query.edit_message_text("❌ *Failed to post. Check Repliz logs for details.*", parse_mode="Markdown")
+                    else:
+                        await query.edit_message_text(f"⏳ *Post scheduled! Current status pending. Check Repliz for updates.*", parse_mode="Markdown")
                 else:
-                    await query.edit_message_text("❌ *Failed to post. Check logs for details.*", parse_mode="Markdown")
+                    await query.edit_message_text("❌ *Failed to create schedule. Check logs for details.*", parse_mode="Markdown")
             else:
                 await query.edit_message_text("❌ *No valid images found to post.*", parse_mode="Markdown")
 
@@ -653,12 +718,24 @@ async def handle_approval_callback(update: Update, context: ContextTypes.DEFAULT
             )
 
             if not new_output_paths:
-                await update.effective_chat.send_message(
+                fail_msg = await update.effective_chat.send_message(
                     "❌ *Regeneration failed.*\n"
                     "The AI could not produce valid content. "
-                    "Please try sending a new prompt.",
+                    "You can try regenerating again or send a new prompt.",
                     parse_mode="Markdown",
+                    reply_markup=RETRY_KEYBOARD,
                 )
+                pending_approvals[(chat_id, fail_msg.message_id)] = {
+                    "user_prompt": user_prompt,
+                    "output_dir": new_output_dir,
+                    "output_paths": [],
+                    "file_ids": [],
+                    "user_id": user_id,
+                    "user_name": user_name,
+                    "csv_row_index": csv_row_index,
+                    "scheduler": scheduler,
+                    "generated_caption": "",
+                }
                 return
 
             # Send new images + new approval buttons

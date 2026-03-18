@@ -67,21 +67,41 @@ class ReplizFeature(BaseFeature):
         now_iso = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
         payload["scheduleAt"] = now_iso
 
-        success_count = 0
+        created_schedules = []
         for acc_id in account_ids:
             payload["accountId"] = acc_id
             url = f"{self.BASE_URL}/public/schedule"
             try:
                 resp = requests.post(url, json=payload, auth=self._get_auth())
                 resp.raise_for_status()
-                success_count += 1
+                data = resp.json()
+                created_schedules.append({
+                    "account_id": acc_id,
+                    "schedule_id": data.get("_id"),
+                    "status": data.get("status", "pending")
+                })
                 print(f"  ✅ Successfully scheduled on Repliz account {acc_id}")
             except Exception as e:
                 print(f"  ❌ Repliz Error for account {acc_id}: {e}")
                 if hasattr(e, "response") and e.response is not None:
                     print(f"     Details: {e.response.text}")
 
-        return success_count > 0
+        return created_schedules
+
+    def get_schedule_status(self, schedule_id):
+        """Fetch the status of a scheduled post by its ID."""
+        if not self.access_key or not schedule_id:
+            return None
+        
+        url = f"{self.BASE_URL}/public/schedule/{schedule_id}"
+        try:
+            resp = requests.get(url, auth=self._get_auth())
+            resp.raise_for_status()
+            data = resp.json()
+            return data.get("status")
+        except Exception as e:
+            print(f"❌ Repliz Error: Could not fetch schedule status for {schedule_id} - {e}")
+            return None
 
     def execute(self, *args, **kwargs):
         pass
