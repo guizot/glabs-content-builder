@@ -643,29 +643,31 @@ async def handle_approval_callback(update: Update, context: ContextTypes.DEFAULT
             else:
                 account_ids = [target]
 
-            # Upload local files for public URLs accessible by Facebook
-            # Upload local files for public URLs accessible by Facebook using ImgBB
-            imgbb_api_key = os.environ.get("IMGBB_API_KEY", "")
+            # Upload local files for public URLs accessible by Facebook using Catbox.moe
+            # Extremely reliable host, no API key needed, direct SSL links that work cleanly with Repliz
             file_urls = []
             
             for path in session.get("output_paths", []):
                 uploaded_url = None
                 
                 try:
-                    if not imgbb_api_key:
-                        print(f"  ⚠️ IMGBB_API_KEY is missing! Cannot upload to ImgBB.")
-                    else:
-                        print(f"  📤 Uploading to ImgBB (1 hour expiration): {path}")
-                        filename, f_buffer, mime_type = compress_image_for_upload(path)
-                        resp = requests.post(
-                            f"https://api.imgbb.com/1/upload?key={imgbb_api_key}",
-                            files={"image": (filename, f_buffer, mime_type)},
-                            data={"expiration": 3600}
-                        )
-                        resp.raise_for_status()
-                        uploaded_url = resp.json().get("data", {}).get("url")
+                    print(f"  📤 Uploading securely to Catbox.moe: {path}")
+                    filename, f_buffer, mime_type = compress_image_for_upload(path)
+                    f_buffer.seek(0)
+                    
+                    resp = requests.post(
+                        "https://catbox.moe/user/api.php",
+                        data={"reqtype": "fileupload"},
+                        files={"fileToUpload": (filename, f_buffer, mime_type)}
+                    )
+                    resp.raise_for_status()
+                    
+                    # Catbox returns the raw direct image URL instantly
+                    result_text = resp.text.strip()
+                    if result_text.startswith("http"):
+                        uploaded_url = result_text
                 except Exception as e:
-                    print(f"  ⚠️ Error uploading {path} to ImgBB: {e}")
+                    print(f"  ⚠️ Error uploading {path} to Catbox: {e}")
 
                 if uploaded_url:
                     print(f"  ✅ Uploaded successfully: {uploaded_url}")
@@ -676,7 +678,7 @@ async def handle_approval_callback(update: Update, context: ContextTypes.DEFAULT
                         "thumbnail": uploaded_url
                     })
                 else:
-                    print(f"  ❌ Failed to upload {path} to ImgBB.")
+                    print(f"  ❌ Failed to upload {path} to Catbox.")
 
             if file_urls:
                 # Use LLM-generated caption, fallback to user prompt

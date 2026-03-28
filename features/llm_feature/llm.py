@@ -69,6 +69,7 @@ class LLMFeature(BaseFeature):
                     {"role": "user", "content": final_prompt},
                 ],
                 temperature=0.7,
+                max_tokens=4000,
             )
             
             raw_text = response.choices[0].message.content
